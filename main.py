@@ -1,4 +1,4 @@
-import utils, histogram
+import utils, histogram, binning
 import constants as c
 import glob, pickle
 import cv2
@@ -20,10 +20,15 @@ def make_image_pickle(folder, output_file, expected_shape=None):
     return images
 
 def preprocess():
-    vehicle_images = make_image_pickle(c.vehicles_train_data_folder, c.vehicles_train_data_p, (64,64,3))
-    non_vehicle_images = make_image_pickle(c.non_vehicles_train_data_folder, c.non_vehicles_train_data_p, (64,64,3))
-    vehicle_hists = histogram.multispace_histograms_images(vehicle_images, c.vehicles_histograms_p)
-    non_vehicle_hists = histogram.multispace_histograms_images(non_vehicle_images, c.non_vehicles_histograms_p)
+    vehicle_images = utils.unpickle_data(c.vehicles_train_data_p)
+    non_vehicle_images = utils.unpickle_data(c.non_vehicles_train_data_p)
+
+    # vehicle_images = make_image_pickle(c.vehicles_train_data_folder, c.vehicles_train_data_p, (64,64,3))
+    # non_vehicle_images = make_image_pickle(c.non_vehicles_train_data_folder, c.non_vehicles_train_data_p, (64,64,3))
+    # vehicle_hists = histogram.multispace_histograms_images(vehicle_images, c.vehicles_histograms_p)
+    # non_vehicle_hists = histogram.multispace_histograms_images(non_vehicle_images, c.non_vehicles_histograms_p)
+    vehicle_sbins = binning.multispace_spatial_bin_images(vehicle_images, c.vehicles_spatial_bins_p)
+    non_vehicle_sbins = binning.multispace_spatial_bin_images(non_vehicle_images, c.non_vehicles_spatial_bins_p)
 
 
 if __name__=='__main__':
@@ -34,11 +39,14 @@ if __name__=='__main__':
     print('vehicle images: ',vehicle_images.shape)
     print('non_vehicle images: ',non_vehicle_images.shape)
 
-
     vehicle_hists = utils.unpickle_data(c.vehicles_histograms_p)
     non_vehicle_hists = utils.unpickle_data(c.non_vehicles_histograms_p)
     print('vehicle hists: ',vehicle_hists.shape)
     print('non_vehicle hists: ',non_vehicle_hists.shape)
 
+    vehicle_sbins = utils.unpickle_data(c.vehicles_spatial_bins_p)
+    non_vehicle_sbins = utils.unpickle_data(c.non_vehicles_spatial_bins_p)
+    print('vehicle hists: ',vehicle_hists.shape)
+    print('non_vehicle hists: ',non_vehicle_hists.shape)
 
 

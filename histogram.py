@@ -17,16 +17,16 @@ def multispace_histograms(img_bgr, nbins=32):
     m_features = []
 
     img = img_bgr
-    m_features.append(color_histograms(img))
+    m_features.append(color_histograms(img, nbins))
 
     img = utils.img_bgr2hls(img_bgr)
-    m_features.append(color_histograms(img))
+    m_features.append(color_histograms(img, nbins))
 
     img = utils.img_bgr2xyz(img_bgr)
-    m_features.append(color_histograms(img))
+    m_features.append(color_histograms(img, nbins))
 
     img = utils.img_bgr2luv(img_bgr)
-    m_features.append(color_histograms(img))
+    m_features.append(color_histograms(img, nbins))
 
     return(np.array(m_features))
 
@@ -41,9 +41,11 @@ def multispace_histograms_images(images, output_file=None, nbins=32):
 
     for i in range(len(images)):
         img = images[i]
-        mf_hists.append(multispace_histograms(img))
+        mf_hists.append(multispace_histograms(img, nbins))
         if i%100==0:
             utils.print_progress_bar (i, len(images), prefix = 'multispace histogram:')
+
+    mf_hists = np.array(mf_hists)
 
     if output_file is not None:
         utils.pickle_data(output_file, mf_hists)
