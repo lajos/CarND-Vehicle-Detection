@@ -1,4 +1,4 @@
-import utils, histogram, binning, hog
+import utils, histogram, binning, hog, feat
 import constants as c
 import glob, pickle, time, sys
 import cv2
@@ -108,6 +108,44 @@ def find_cars(img, ystart, ystop, scale, svc, X_scaler, orient, pix_per_cell, ce
 if __name__=='__main__':
     preprocess()
     # sys.exit(0)
+
+    use_features = {
+        c.hists: [[c.hls_index, 2],
+                #   [c.xyz_index, 0],
+                #   [c.xyz_index, 1],
+                #   [c.xyz_index, 2],
+                  [c.luv_index, 0],
+                  [c.luv_index, 1],
+                  [c.luv_index, 2]],
+        c.sbins: [c.hls_index,
+                  c.xyz_index,
+                  c.luv_index],
+        c.hogs: [[c.xyz_index, 0]]
+                #  [c.luv_index, 1],
+                #  [c.luv_index, 2]]
+    }
+
+    X, y = feat.get_features(use_features)
+
+    from sklearn.svm import LinearSVC
+    from sklearn.svm import SVC
+    from sklearn.model_selection import train_test_split
+    import time
+
+    print('X:', X.shape)
+    print('y:', y.shape)
+
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+    # svc = LinearSVC(True)
+    svc = SVC(probability=True)
+    t=time.time()
+    svc.fit(X_train, y_train)
+    t2 = time.time()
+    print(round(t2-t, 2), 'Seconds to train SVC...')
+    print('Test Accuracy of SVC = ', round(svc.score(X_test, y_test), 4))
+
+    utils.pickle_data(c.svm_p, svc)
 
     # vehicle_images = utils.unpickle_data(c.vehicles_train_data_p)
     # non_vehicle_images = utils.unpickle_data(c.non_vehicles_train_data_p)

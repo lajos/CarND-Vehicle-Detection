@@ -1,4 +1,4 @@
-import os, pickle, glob, csv
+import os, pickle, glob, csv, joblib
 import constants
 import cv2
 import matplotlib.pyplot as plt
@@ -23,13 +23,13 @@ def warning(message):
 
 def pickle_data(file_name, data):
     with open(file_name, 'wb') as f:
-        pickle.dump(data, f, protocol=pickle.HIGHEST_PROTOCOL)
+        joblib.dump(data, f, compress=True)
 
 def unpickle_data(file_name):
     data=None
     try:
         with open(file_name, mode='rb') as f:
-            data = pickle.load(f)
+            data = joblib.load(f)
     except:
         pass
     return data
