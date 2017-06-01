@@ -98,11 +98,12 @@ def img_luv2bgr(img):
 def img_bgr2l(img):
     return cv2.cvtColor(img, cv2.COLOR_BGR2Luv)[:,:,0]
 
-def scale_mean_std(data):
-    data_min = np.min(data)
-    data_max = np.max(data)
-    return (data-data_min)/(data_max-data_min)-0.5
-
+def scale_mean_std(data, data_min=None, data_max=None):
+    if data_min is None:
+        data_min = np.min(data)
+    if data_max is None:
+        data_max = np.max(data)
+    return ((data-data_min)/(data_max-data_min)-0.5)
 
 
 def img_draw_poly(img, pts, color=(255,255,255), thickness=2):

@@ -26,44 +26,17 @@ def make_image_pickle(folder, output_file, expected_shape=None):
 
 def preprocess():
     # preload image data to speed up processing for testing
-    vehicle_images = utils.unpickle_data(c.vehicles_train_data_p)
-    non_vehicle_images = utils.unpickle_data(c.non_vehicles_train_data_p)
+    # vehicle_images = utils.unpickle_data(c.vehicles_train_data_p)
+    # non_vehicle_images = utils.unpickle_data(c.non_vehicles_train_data_p)
 
-    # vehicle_images = make_image_pickle(c.vehicles_train_data_folder, c.vehicles_train_data_p, (64,64,3))
-    # non_vehicle_images = make_image_pickle(c.non_vehicles_train_data_folder, c.non_vehicles_train_data_p, (64,64,3))
-    # vehicle_hists = histogram.multispace_histograms_images(vehicle_images, c.vehicles_histograms_p)
-    # non_vehicle_hists = histogram.multispace_histograms_images(non_vehicle_images, c.non_vehicles_histograms_p)
-    # vehicle_sbins = binning.multispace_spatial_bin_images(vehicle_images, c.vehicles_spatial_bins_p)
-    # non_vehicle_sbins = binning.multispace_spatial_bin_images(non_vehicle_images, c.non_vehicles_spatial_bins_p)
+    vehicle_images = make_image_pickle(c.vehicles_train_data_folder, c.vehicles_train_data_p, (64,64,3))
+    non_vehicle_images = make_image_pickle(c.non_vehicles_train_data_folder, c.non_vehicles_train_data_p, (64,64,3))
+    vehicle_hists = histogram.multispace_histograms_images(vehicle_images, c.vehicles_histograms_p)
+    non_vehicle_hists = histogram.multispace_histograms_images(non_vehicle_images, c.non_vehicles_histograms_p)
+    vehicle_sbins = binning.multispace_spatial_bin_images(vehicle_images, c.vehicles_spatial_bins_p)
+    non_vehicle_sbins = binning.multispace_spatial_bin_images(non_vehicle_images, c.non_vehicles_spatial_bins_p)
     vehicle_hogs = hog.multispace_hog_images(vehicle_images, c.vehicles_hog_p)
     non_vehicle_hogs = hog.multispace_hog_images(non_vehicle_images, c.non_vehicles_hog_p)
-
-
-def combine_features(hists, sbins, hogs, sel_hists=[], sel_sbins=[], sel_hogs=False):
-    features=np.zeros((hists.shape[0],1), dtype=np.float32)       # "empty" features to concat to
-
-    # for cspace, channel in sel_hists:
-    #     features = np.concatenate((features, utils.scale_mean_std(hists[:, cspace, channel])),axis=1)
-
-    # for cspace in sel_sbins:
-    #     features = np.concatenate((features, utils.scale_mean_std(sbins[:, cspace])),axis=1)
-
-    # if sel_hogs:
-    #     features = np.concatenate((features, utils.scale_mean_std(hogs)),axis=1)
-
-    for cspace, channel in sel_hists:
-        features = np.concatenate((features, hists[:, cspace, channel]),axis=1)
-
-    for cspace in sel_sbins:
-        features = np.concatenate((features, sbins[:, cspace]),axis=1)
-
-    if sel_hogs:
-        features = np.concatenate((features, hogs),axis=1)
-
-
-    features = features[:,1:]  # remove 0 column that was created for placeholder
-
-    return features
 
 
 # Define a single function that can extract features using hog sub-sampling and make predictions
@@ -134,69 +107,61 @@ def find_cars(img, ystart, ystop, scale, svc, X_scaler, orient, pix_per_cell, ce
 
 if __name__=='__main__':
     preprocess()
-    sys.exit(0)
+    # sys.exit(0)
 
-    vehicle_images = utils.unpickle_data(c.vehicles_train_data_p)
-    non_vehicle_images = utils.unpickle_data(c.non_vehicles_train_data_p)
-    print('vehicle images: ',vehicle_images.shape)
-    print('non_vehicle images: ',non_vehicle_images.shape)
-
-    vehicle_hists = utils.unpickle_data(c.vehicles_histograms_p)
-    non_vehicle_hists = utils.unpickle_data(c.non_vehicles_histograms_p)
-    print('vehicle hists: ',vehicle_hists.shape)
-    print('non_vehicle hists: ',non_vehicle_hists.shape)
-
-    vehicle_sbins = utils.unpickle_data(c.vehicles_spatial_bins_p)
-    non_vehicle_sbins = utils.unpickle_data(c.non_vehicles_spatial_bins_p)
-    print('vehicle bins: ',vehicle_sbins.shape)
-    print('non_vehicle bins: ',non_vehicle_sbins.shape)
-
-    vehicle_hogs = utils.unpickle_data(c.vehicles_hog_p)
-    non_vehicle_hogs = utils.unpickle_data(c.non_vehicles_hog_p)
-    print('vehicle hog: ',vehicle_hogs.shape)
-    print('non_vehicle hog: ',non_vehicle_hogs.shape)
-
-    vehicle_features = combine_features(vehicle_hists, vehicle_sbins, vehicle_hogs,
-                                        sel_hists = [[c.hls_index, 2],
-                                                    [c.xyz_index, 0],
-                                                    [c.luv_index, 0]],
-                                        sel_sbins = [c.hls_index,
-                                                     c.xyz_index,
-                                                     c.luv_index],
-                                        sel_hogs=True)
-
-    non_vehicle_features = combine_features(non_vehicle_hists, non_vehicle_sbins, non_vehicle_hogs,
-                                            sel_hists = [[c.hls_index, 2],
-                                                        [c.xyz_index, 0],
-                                                        [c.luv_index, 0]],
-                                            sel_sbins = [c.hls_index,
-                                                        c.xyz_index,
-                                                        c.luv_index],
-                                            sel_hogs=True)
+    # vehicle_images = utils.unpickle_data(c.vehicles_train_data_p)
+    # non_vehicle_images = utils.unpickle_data(c.non_vehicles_train_data_p)
+    # print('vehicle images: ',vehicle_images.shape)
+    # print('non_vehicle images: ',non_vehicle_images.shape)
 
 
-    print('vehicle feautures:',vehicle_features.shape)
-    print('non_vehicle feautures:',non_vehicle_features.shape)
+    # use_features = {
+    #     'hists': [[c.hls_index, 2],
+    #               [c.xyz_index, 0],
+    #               [c.luv_index, 0]]
+    # }
 
-    X = np.concatenate((vehicle_features, non_vehicle_features))
-    y = np.concatenate((np.ones(vehicle_features.shape[0]), np.zeros(non_vehicle_features.shape[0])))
+    # vehicle_features = combine_features(vehicle_hists, vehicle_sbins, vehicle_hogs,
+    #                                     sel_hists = [[c.hls_index, 2],
+    #                                                 [c.xyz_index, 0],
+    #                                                 [c.luv_index, 0]],
+    #                                     sel_sbins = [c.hls_index,
+    #                                                  c.xyz_index,
+    #                                                  c.luv_index],
+    #                                     sel_hogs=True)
 
-    X_scaler = StandardScaler().fit(X)
+    # non_vehicle_features = combine_features(non_vehicle_hists, non_vehicle_sbins, non_vehicle_hogs,
+    #                                         sel_hists = [[c.hls_index, 2],
+    #                                                     [c.xyz_index, 0],
+    #                                                     [c.luv_index, 0]],
+    #                                         sel_sbins = [c.hls_index,
+    #                                                     c.xyz_index,
+    #                                                     c.luv_index],
+    #                                         sel_hogs=True)
 
-    X = X_scaler.transform(X)
+
+    # print('vehicle feautures:',vehicle_features.shape)
+    # print('non_vehicle feautures:',non_vehicle_features.shape)
+
+    # X = np.concatenate((vehicle_features, non_vehicle_features))
+    # y = np.concatenate((np.ones(vehicle_features.shape[0]), np.zeros(non_vehicle_features.shape[0])))
+
+    # X_scaler = StandardScaler().fit(X)
+
+    # X = X_scaler.transform(X)
 
 
-    print('X:', X.shape)
-    print('y:', y.shape)
+    # print('X:', X.shape)
+    # print('y:', y.shape)
 
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    # X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-    svc = LinearSVC()
-    t=time.time()
-    svc.fit(X_train, y_train)
-    t2 = time.time()
-    print(round(t2-t, 2), 'Seconds to train SVC...')
-    print('Test Accuracy of SVC = ', round(svc.score(X_test, y_test), 4))
+    # svc = LinearSVC()
+    # t=time.time()
+    # svc.fit(X_train, y_train)
+    # t2 = time.time()
+    # print(round(t2-t, 2), 'Seconds to train SVC...')
+    # print('Test Accuracy of SVC = ', round(svc.score(X_test, y_test), 4))
 
     # t=time.time()
     # n_predict = 1000
