@@ -91,7 +91,7 @@ def get_features(use_features):
     X_scaler = StandardScaler().fit(X)
     X = X_scaler.transform(X)
 
-    return X, y
+    return X, y, X_scaler
 
 
 if __name__=='__main__':

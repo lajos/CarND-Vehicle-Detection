@@ -106,26 +106,21 @@ def find_cars(img, ystart, ystop, scale, svc, X_scaler, orient, pix_per_cell, ce
     return draw_img
 
 if __name__=='__main__':
-    preprocess()
+    # preprocess()
     # sys.exit(0)
 
     use_features = {
-        c.hists: [[c.hls_index, 2],
-                #   [c.xyz_index, 0],
-                #   [c.xyz_index, 1],
-                #   [c.xyz_index, 2],
-                  [c.luv_index, 0],
-                  [c.luv_index, 1],
-                  [c.luv_index, 2]],
+        c.hists: [[c.hls_index, 1],
+                  [c.hls_index, 2]],
         c.sbins: [c.hls_index,
                   c.xyz_index,
                   c.luv_index],
-        c.hogs: [[c.xyz_index, 0]]
-                #  [c.luv_index, 1],
-                #  [c.luv_index, 2]]
+        c.hogs: [[c.luv_index, 0],
+                [c.luv_index, 1],
+                [c.luv_index, 2]]
     }
 
-    X, y = feat.get_features(use_features)
+    X, y, X_scaler = feat.get_features(use_features)
 
     from sklearn.svm import LinearSVC
     from sklearn.svm import SVC
@@ -145,7 +140,9 @@ if __name__=='__main__':
     print(round(t2-t, 2), 'Seconds to train SVC...')
     print('Test Accuracy of SVC = ', round(svc.score(X_test, y_test), 4))
 
+    utils.pickle_data(c.x_scaler_p, X_scaler)
     utils.pickle_data(c.svm_p, svc)
+
 
     # vehicle_images = utils.unpickle_data(c.vehicles_train_data_p)
     # non_vehicle_images = utils.unpickle_data(c.non_vehicles_train_data_p)
