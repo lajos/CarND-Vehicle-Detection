@@ -1,7 +1,7 @@
-import utils, hog
+import utils, hog, histogram, binning
 import constants as c
 import numpy as np
-import cv2, sys
+import cv2, sys, time
 import matplotlib.pyplot as plt
 
 
@@ -74,8 +74,8 @@ def find_cars_ori(img, ystart, ystop, scale, svc, X_scaler, orient, pix_per_cell
 X_scaler = None
 svc = None
 
-def slide_windows(channels, hogs, use_features):
-    img_shape = np.array(channels[c.bgr_index][0].shape)
+def slide_windows(images, hogs, use_features, scale):
+    img_shape = np.array(images[c.bgr_index].shape)
     img_w = img_shape[1]
     img_h = img_shape[0]
 
@@ -87,78 +87,85 @@ def slide_windows(channels, hogs, use_features):
     # hog features per block
     n_feat_per_block = c.hog_orient*c.hog_cell_per_block**2
 
-
-# we are here
-
-    # 64 was the orginal sampling rate, with 8 cells and 8 pix per cell
-    window = 64
-    nblocks_per_window = (window // pix_per_cell) - cell_per_block + 1
+    window_size = c.sample_size
+    n_blocks_per_window = (window_size // c.hog_pix_per_cell) - c.hog_cell_per_block + 1
     cells_per_step = 2  # Instead of overlap, define how many cells to step
-    nxsteps = (nxblocks - nblocks_per_window) // cells_per_step
-    nysteps = (nyblocks - nblocks_per_window) // cells_per_step
+    n_steps = ((n_blocks - n_blocks_per_window) / cells_per_step).astype(int)
 
-    # Compute individual channel HOG features for the entire image
-    hog1 = get_hog_features(ch1, orient, pix_per_cell, cell_per_block, feature_vec=False)
-    hog2 = get_hog_features(ch2, orient, pix_per_cell, cell_per_block, feature_vec=False)
-    hog3 = get_hog_features(ch3, orient, pix_per_cell, cell_per_block, feature_vec=False)
+    n_x_steps = n_steps[1]
+    n_y_steps = n_steps[0]
 
-    for xb in range(nxsteps):
-        for yb in range(nysteps):
-            ypos = yb*cells_per_step
-            xpos = xb*cells_per_step
-            # Extract HOG for this patch
-            hog_feat1 = hog1[ypos:ypos+nblocks_per_window, xpos:xpos+nblocks_per_window].ravel()
-            hog_feat2 = hog2[ypos:ypos+nblocks_per_window, xpos:xpos+nblocks_per_window].ravel()
-            hog_feat3 = hog3[ypos:ypos+nblocks_per_window, xpos:xpos+nblocks_per_window].ravel()
-            hog_features = np.hstack((hog_feat1, hog_feat2, hog_feat3))
+    detections = []
 
-            xleft = xpos*pix_per_cell
-            ytop = ypos*pix_per_cell
+    for xb in range(n_x_steps):
+        for yb in range(n_y_steps):
+            y_pos = yb*cells_per_step
+            x_pos = xb*cells_per_step
 
-            # Extract the image patch
-            subimg = cv2.resize(ctrans_tosearch[ytop:ytop+window, xleft:xleft+window], (64,64))
+            x_left = x_pos * c.hog_pix_per_cell
+            y_top = y_pos * c.hog_pix_per_cell
 
-            # Get color features
-            spatial_features = bin_spatial(subimg, size=spatial_size)
-            hist_features = color_hist(subimg, nbins=hist_bins)
+            features=np.zeros(1, dtype=np.float32)       # "empty" features to concat to
 
-            # Scale features and make a prediction
-            test_features = X_scaler.transform(np.hstack((spatial_features, hist_features, hog_features)).reshape(1, -1))
-            #test_features = X_scaler.transform(np.hstack((shape_feat, hist_feat)).reshape(1, -1))
+            start_time = time.time()
+
+            for cspace, channel in use_features[c.hists]:
+                sub_img = images[cspace][y_top:y_top+window_size, x_left:x_left+window_size]
+                f = histogram.color_histograms(sub_img)[channel]
+                features = np.concatenate((features, f))
+
+            for cspace in use_features[c.sbins]:
+                sub_img = images[cspace][y_top:y_top+window_size, x_left:x_left+window_size]
+                f = binning.spatial_bin(sub_img)
+                features = np.concatenate((features, f))
+
+            for h in hogs:
+                hf = h[y_pos:y_pos+n_blocks_per_window, x_pos:x_pos+n_blocks_per_window].ravel()
+                features = np.concatenate((features, hf))
+
+            features = features[1:]  # remove 0 column that was created for placeholder
+
+            features = features.reshape(1,-1)
+
+            features_time = time.time()
+
+            test_features = X_scaler.transform(features)
             test_prediction = svc.predict(test_features)
 
-            if test_prediction == 1:
-                xbox_left = np.int(xleft*scale)
-                ytop_draw = np.int(ytop*scale)
-                win_draw = np.int(window*scale)
-                cv2.rectangle(draw_img,(xbox_left, ytop_draw+ystart),(xbox_left+win_draw,ytop_draw+win_draw+ystart),(0,0,255),6)
+            print('{} {} feat:{:.4f} pred:{:.4f}'.format(xb,yb,features_time-start_time, time.time()-start_time))
 
-    return draw_img
+            if test_prediction == 1:
+                xbox_left = np.int(x_left*scale)
+                ytop_draw = np.int(y_top*scale)
+                win_draw = np.int(window_size*scale)
+                # detections.append([(xbox_left, ytop_draw+ystart),(xbox_left+win_draw,ytop_draw+win_draw+ystart)])
+                detections.append([(xbox_left, ytop_draw),(xbox_left+win_draw,ytop_draw+win_draw)])
+
+    return detections
 
 
 def get_channels(img_bgr):
-    """prepare all image channels"""
+    """prepare all image spaces and channels"""
+    images = []
     channels = []
 
     img = img_bgr
+    images.append(img)
     channels.append(cv2.split(img))
 
     img = utils.img_bgr2hls(img_bgr)
+    images.append(img)
     channels.append(cv2.split(img))
 
     img = utils.img_bgr2xyz(img_bgr)
+    images.append(img)
     channels.append(cv2.split(img))
 
     img = utils.img_bgr2luv(img_bgr)
+    images.append(img)
     channels.append(cv2.split(img))
 
-    # print('channels:',len(channels))
-    # print('bgr channels:',len(channels[c.bgr_index]), channels[c.bgr_index][0].shape)
-    # print('hls channels:',len(channels[c.hls_index]), channels[c.hls_index][0].shape)
-    # print('xyz channels:',len(channels[c.xyz_index]), channels[c.xyz_index][0].shape)
-    # print('luv channels:',len(channels[c.luv_index]), channels[c.luv_index][0].shape)
-
-    return channels
+    return images, channels
 
 def get_hogs(channels, use_features):
     """prepare used hogs"""
@@ -182,29 +189,35 @@ def find_vehicles(img_bgr, svc_, X_scaler_, use_features):
 
     y_from = 400
     y_to = 656
-    scale = 0.5
+    scale = 1
 
     img_region = img_bgr[y_from:y_to,:,:]
     if scale != 1:
-        img_region = cv2.resize(img_region, (np.int(img_region.shape[1]*scale), np.int(img_region.shape[0]*scale)))
+        img_region = cv2.resize(img_region, (np.int(img_region.shape[1]/scale), np.int(img_region.shape[0]/scale)))
 
     # cv2.imshow('test', img_region)
     # cv2.waitKey()
 
-    channels = get_channels(img_region)
+    images, channels = get_channels(img_region)
     hogs = get_hogs(channels, use_features)
 
-    slide_windows(channels, hog, use_features)
+    detections = slide_windows(images, hogs, use_features, scale)
+
+    detections = np.array(detections)
+    detections[:,:,1] += y_from
+
+    return detections
 
 
 
 if __name__=='__main__':
     img_bgr = cv2.imread('{}/0001.png'.format(c.test_video_images_folder))
+
     # cv2.imshow('test', img_bgr)
     # cv2.waitKey()
 
-    X_scaler_ = utils.pickle_data(c.x_scaler_p, X_scaler)
-    svc_ = utils.pickle_data(c.svm_p, svc)
+    X_scaler_ = utils.unpickle_data(c.x_scaler_p)
+    svc_ = utils.unpickle_data(c.svm_p)
 
     use_features = {
         c.hists: [[c.hls_index, 1],
@@ -217,7 +230,16 @@ if __name__=='__main__':
                 [c.luv_index, 2]]
     }
 
-    find_vehicles(img_bgr, svc_, X_scaler_, use_features)
+    detections = find_vehicles(img_bgr, svc_, X_scaler_, use_features)
+
+    print(detections)
+
+    for i in detections:
+        cv2.rectangle(img_bgr,tuple(i[0]),tuple(i[1]),(0,0,255),1)
+
+    cv2.imshow('test', img_bgr)
+    cv2.waitKey()
+
 
     # out_img = find_cars(img, ystart, ystop, scale, svc, X_scaler, orient, pix_per_cell, cell_per_block, spatial_size, hist_bins)
 

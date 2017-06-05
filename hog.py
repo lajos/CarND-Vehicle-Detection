@@ -14,9 +14,7 @@ def hog_features(img, orient=8, pix_per_cell=8, cell_per_block=2, transform_sqrt
     else:
         features = hog(img, orientations=orient, pixels_per_cell=(pix_per_cell, pix_per_cell),
                        cells_per_block=(cell_per_block, cell_per_block), transform_sqrt=transform_sqrt,
-                       visualise=False, block_norm='L2-Hys')
-        if flatten:
-            features = np.ravel(features)
+                       visualise=False, feature_vector=flatten, block_norm='L2-Hys')
         return features
 
 def hog_channels(img, orient=8, pix_per_cell=8, cell_per_block=2, transform_sqrt=True, flatten=False):

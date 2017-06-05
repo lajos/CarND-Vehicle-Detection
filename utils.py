@@ -23,7 +23,7 @@ def warning(message):
 
 def pickle_data(file_name, data):
     with open(file_name, 'wb') as f:
-        joblib.dump(data, f, compress=True)
+        joblib.dump(data, f, compression=True)
 
 def unpickle_data(file_name):
     data=None

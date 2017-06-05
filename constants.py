@@ -20,9 +20,7 @@ x_scaler_p = train_data_folder + '/x_scaler.z'
 
 
 # sample size
-sample_w = 64
-sample_h = 64
-sample_size = (sample_w, sample_h)
+sample_size = 64
 
 # hog parameters
 hog_orient=8
