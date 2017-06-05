@@ -23,7 +23,7 @@ def warning(message):
 
 def pickle_data(file_name, data):
     with open(file_name, 'wb') as f:
-        joblib.dump(data, f, compression=True)
+        joblib.dump(data, f, compress=True)
 
 def unpickle_data(file_name):
     data=None
@@ -76,6 +76,9 @@ def read_folder_images(folder_name):
     for i in image_names:
         images.append(cv2.imread(i))
     return images
+
+def img_reverse_channels(img):
+    return img[:,:,[2,1,0]].copy()
 
 def img_bgr2hls(img):
     return cv2.cvtColor(img, cv2.COLOR_BGR2HLS)

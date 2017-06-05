@@ -5,11 +5,11 @@ import utils
 import numpy as np
 
 
-def spatial_bin(img, bin_size=(16,16)):
+def spatial_bin(img, bin_size=(32,32)):
     features = cv2.resize(img, bin_size)
     return features.ravel()
 
-def multispace_spatial_bin(img_bgr, bin_size=(16,16)):
+def multispace_spatial_bin(img_bgr, bin_size=(32,32)):
     """calculate spatial bins for RGB, HLS, xyz and Luv color spaces"""
     m_features = []
 
@@ -27,7 +27,7 @@ def multispace_spatial_bin(img_bgr, bin_size=(16,16)):
 
     return(np.array(m_features))
 
-def multispace_spatial_bin_images(images, output_file=None, bin_size=(16,16)):
+def multispace_spatial_bin_images(images, output_file=None, bin_size=(32,32)):
     """calculate multi colorspace spatial bins for a set of images and optionally pickle"""
     if output_file is not None:
         print('calculate multispace spatial bins, pickle to:', output_file)

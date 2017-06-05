@@ -1,7 +1,9 @@
 .DS_Store
 __pycache__/
 videos/
+output_images/debug/
 
 *.p
 *.z
 
+*.mp4

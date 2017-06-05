@@ -75,6 +75,49 @@ X_scaler = None
 svc = None
 
 def slide_windows(images, hogs, use_features, scale):
+
+    def classify_window(pos):
+        xb, yb = pos
+        y_pos = yb*cells_per_step
+        x_pos = xb*cells_per_step
+
+        x_left = x_pos * c.hog_pix_per_cell
+        y_top = y_pos * c.hog_pix_per_cell
+
+        features=np.zeros(1, dtype=np.float32)       # "empty" features to concat to
+
+        for cspace, channel in use_features[c.hists]:
+            sub_img = images[cspace][y_top:y_top+window_size, x_left:x_left+window_size]
+            f = histogram.color_histograms(sub_img)[channel]
+            features = np.concatenate((features, f))
+
+        for cspace in use_features[c.sbins]:
+            sub_img = images[cspace][y_top:y_top+window_size, x_left:x_left+window_size]
+            f = binning.spatial_bin(sub_img)
+            features = np.concatenate((features, f))
+
+        for h in hogs:
+            hf = h[y_pos:y_pos+n_blocks_per_window, x_pos:x_pos+n_blocks_per_window].ravel()
+            features = np.concatenate((features, hf))
+
+        features = features[1:]  # remove 0 column that was created for placeholder
+
+        features = features.reshape(1,-1)
+
+        features_time = time.time()
+
+        test_features = X_scaler.transform(features)
+        test_prediction = svc.predict(test_features)
+
+        if test_prediction == 1:
+            xbox_left = np.int(x_left*scale)
+            ytop_draw = np.int(y_top*scale)
+            win_draw = np.int(window_size*scale)
+            return [(xbox_left, ytop_draw),(xbox_left+win_draw,ytop_draw+win_draw)]
+
+        return None
+
+
     img_shape = np.array(images[c.bgr_index].shape)
     img_w = img_shape[1]
     img_h = img_shape[0]
@@ -97,49 +140,17 @@ def slide_windows(images, hogs, use_features, scale):
 
     detections = []
 
+    positions = []
+
     for xb in range(n_x_steps):
         for yb in range(n_y_steps):
-            y_pos = yb*cells_per_step
-            x_pos = xb*cells_per_step
+            positions.append([xb,yb])
 
-            x_left = x_pos * c.hog_pix_per_cell
-            y_top = y_pos * c.hog_pix_per_cell
 
-            features=np.zeros(1, dtype=np.float32)       # "empty" features to concat to
+            d = classify_window((xb, yb))
+            if d is not None:
+                detections.append(d)
 
-            start_time = time.time()
-
-            for cspace, channel in use_features[c.hists]:
-                sub_img = images[cspace][y_top:y_top+window_size, x_left:x_left+window_size]
-                f = histogram.color_histograms(sub_img)[channel]
-                features = np.concatenate((features, f))
-
-            for cspace in use_features[c.sbins]:
-                sub_img = images[cspace][y_top:y_top+window_size, x_left:x_left+window_size]
-                f = binning.spatial_bin(sub_img)
-                features = np.concatenate((features, f))
-
-            for h in hogs:
-                hf = h[y_pos:y_pos+n_blocks_per_window, x_pos:x_pos+n_blocks_per_window].ravel()
-                features = np.concatenate((features, hf))
-
-            features = features[1:]  # remove 0 column that was created for placeholder
-
-            features = features.reshape(1,-1)
-
-            features_time = time.time()
-
-            test_features = X_scaler.transform(features)
-            test_prediction = svc.predict(test_features)
-
-            print('{} {} feat:{:.4f} pred:{:.4f}'.format(xb,yb,features_time-start_time, time.time()-start_time))
-
-            if test_prediction == 1:
-                xbox_left = np.int(x_left*scale)
-                ytop_draw = np.int(y_top*scale)
-                win_draw = np.int(window_size*scale)
-                # detections.append([(xbox_left, ytop_draw+ystart),(xbox_left+win_draw,ytop_draw+win_draw+ystart)])
-                detections.append([(xbox_left, ytop_draw),(xbox_left+win_draw,ytop_draw+win_draw)])
 
     return detections
 
@@ -182,14 +193,13 @@ def get_hogs(channels, use_features):
     return hogs
 
 
-def find_vehicles(img_bgr, svc_, X_scaler_, use_features):
+def find_vehicles(img_bgr, svc_, X_scaler_, use_features, y_from=400, y_to=656, window_size=64):
     global X_scaler, svc
     X_scaler = X_scaler_
     svc = svc_
 
-    y_from = 400
-    y_to = 656
-    scale = 1
+    scale = window_size / c.sample_size
+    print(scale)
 
     img_region = img_bgr[y_from:y_to,:,:]
     if scale != 1:
@@ -203,6 +213,11 @@ def find_vehicles(img_bgr, svc_, X_scaler_, use_features):
 
     detections = slide_windows(images, hogs, use_features, scale)
 
+    print('number of detections:',len(detections))
+
+    if len(detections)==0:
+        return None
+
     detections = np.array(detections)
     detections[:,:,1] += y_from
 
@@ -211,7 +226,8 @@ def find_vehicles(img_bgr, svc_, X_scaler_, use_features):
 
 
 if __name__=='__main__':
-    img_bgr = cv2.imread('{}/0001.png'.format(c.test_video_images_folder))
+    img_bgr = cv2.imread('{}/0731.png'.format(c.project_video_images_folder))
+    # img_bgr = cv2.imread('{}/0982.png'.format(c.project_video_images_folder))
 
     # cv2.imshow('test', img_bgr)
     # cv2.waitKey()
@@ -220,19 +236,28 @@ if __name__=='__main__':
     svc_ = utils.unpickle_data(c.svm_p)
 
     use_features = {
-        c.hists: [[c.hls_index, 1],
-                  [c.hls_index, 2]],
-        c.sbins: [c.hls_index,
-                  c.xyz_index,
-                  c.luv_index],
+        c.hists: [[c.luv_index, 0],
+                  [c.luv_index, 1],
+                  [c.luv_index, 2]],
+        c.sbins: [c.luv_index],
         c.hogs: [[c.luv_index, 0],
                 [c.luv_index, 1],
                 [c.luv_index, 2]]
     }
 
-    detections = find_vehicles(img_bgr, svc_, X_scaler_, use_features)
 
-    print(detections)
+    detections = find_vehicles(img_bgr, svc_, X_scaler_, use_features, 400,400+128,48)
+    detections = find_vehicles(img_bgr, svc_, X_scaler_, use_features, 400,400+256,64)
+    # detections = find_vehicles(img_bgr, svc_, X_scaler_, use_features, 400,400+128,96)
+    # detections = find_vehicles(img_bgr, svc_, X_scaler_, use_features, 400,400+192,128)
+    # detections = find_vehicles(img_bgr, svc_, X_scaler_, use_features, 400,400+256,160)
+    # detections = find_vehicles(img_bgr, svc_, X_scaler_, use_features, 400,400+256,256)
+
+    if detections is None:
+        print('no vehicles detected')
+        sys.exit(0)
+
+    utils.pickle_data(c.test_detections_p, detections)
 
     for i in detections:
         cv2.rectangle(img_bgr,tuple(i[0]),tuple(i[1]),(0,0,255),1)

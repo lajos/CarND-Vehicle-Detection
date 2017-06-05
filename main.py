@@ -1,4 +1,4 @@
-import utils, histogram, binning, hog, feat
+import utils, histogram, binning, hog, feat, classify, heatmap
 import constants as c
 import glob, pickle, time, sys
 import cv2
@@ -6,6 +6,7 @@ import numpy as np
 from sklearn.svm import LinearSVC
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
+import matplotlib.pyplot as plt
 
 # suppress scientific notation
 np.set_printoptions(suppress=True)
@@ -39,168 +40,153 @@ def preprocess():
     non_vehicle_hogs = hog.multispace_hog_images(non_vehicle_images, c.non_vehicles_hog_p)
 
 
-# Define a single function that can extract features using hog sub-sampling and make predictions
-def find_cars(img, ystart, ystop, scale, svc, X_scaler, orient, pix_per_cell, cell_per_block, spatial_size, hist_bins):
+def process_image(img_bgr, svc, X_scaler, use_features, scan_params):
+    detections = None
+    for sp in scan_params:
+        d = classify.find_vehicles(img_bgr, svc, X_scaler, use_features, sp[0], sp[1], sp[2])
+        if d is not None:
+            if detections is None:
+                detections = d
+            else:
+                detections = np.concatenate((detections, d), axis=0)
 
-    draw_img = np.copy(img)
-    img = img.astype(np.float32)/255
+    if detections is None:
+        return img_bgr, np.zeros_like(img_bgr), None
 
-    img_tosearch = img[ystart:ystop,:,:]
-    ctrans_tosearch = convert_color(img_tosearch, conv='RGB2YCrCb')
-    if scale != 1:
-        imshape = ctrans_tosearch.shape
-        ctrans_tosearch = cv2.resize(ctrans_tosearch, (np.int(imshape[1]/scale), np.int(imshape[0]/scale)))
+    hmap = heatmap.HeatMap(img_bgr.shape[:2])
 
-    ch1 = ctrans_tosearch[:,:,0]
-    ch2 = ctrans_tosearch[:,:,1]
-    ch3 = ctrans_tosearch[:,:,2]
+    print(detections.shape)
 
-    # Define blocks and steps as above
-    nxblocks = (ch1.shape[1] // pix_per_cell) - cell_per_block + 1
-    nyblocks = (ch1.shape[0] // pix_per_cell) - cell_per_block + 1
-    nfeat_per_block = orient*cell_per_block**2
+    hmap.add(detections)
+    hmap.threshold(10)
+    hmap.label()
 
-    # 64 was the orginal sampling rate, with 8 cells and 8 pix per cell
-    window = 64
-    nblocks_per_window = (window // pix_per_cell) - cell_per_block + 1
-    cells_per_step = 2  # Instead of overlap, define how many cells to step
-    nxsteps = (nxblocks - nblocks_per_window) // cells_per_step
-    nysteps = (nyblocks - nblocks_per_window) // cells_per_step
+    clipped = hmap.get_clipped()
 
-    # Compute individual channel HOG features for the entire image
-    hog1 = get_hog_features(ch1, orient, pix_per_cell, cell_per_block, feature_vec=False)
-    hog2 = get_hog_features(ch2, orient, pix_per_cell, cell_per_block, feature_vec=False)
-    hog3 = get_hog_features(ch3, orient, pix_per_cell, cell_per_block, feature_vec=False)
+    draw_img = hmap.draw_labeled_bboxes(img_bgr.copy())
 
-    for xb in range(nxsteps):
-        for yb in range(nysteps):
-            ypos = yb*cells_per_step
-            xpos = xb*cells_per_step
-            # Extract HOG for this patch
-            hog_feat1 = hog1[ypos:ypos+nblocks_per_window, xpos:xpos+nblocks_per_window].ravel()
-            hog_feat2 = hog2[ypos:ypos+nblocks_per_window, xpos:xpos+nblocks_per_window].ravel()
-            hog_feat3 = hog3[ypos:ypos+nblocks_per_window, xpos:xpos+nblocks_per_window].ravel()
-            hog_features = np.hstack((hog_feat1, hog_feat2, hog_feat3))
+    return draw_img, clipped, detections
 
-            xleft = xpos*pix_per_cell
-            ytop = ypos*pix_per_cell
 
-            # Extract the image patch
-            subimg = cv2.resize(ctrans_tosearch[ytop:ytop+window, xleft:xleft+window], (64,64))
+def test_image(svc, X_scaler, use_features, scan_params):
+    img_bgr = cv2.imread('{}/0001.png'.format(c.test_video_images_folder))
 
-            # Get color features
-            spatial_features = bin_spatial(subimg, size=spatial_size)
-            hist_features = color_hist(subimg, nbins=hist_bins)
+    draw_img, clipped, detections = process_image(img_bgr, svc, X_scaler, use_features, scan_params)
 
-            # Scale features and make a prediction
-            test_features = X_scaler.transform(np.hstack((spatial_features, hist_features, hog_features)).reshape(1, -1))
-            #test_features = X_scaler.transform(np.hstack((shape_feat, hist_feat)).reshape(1, -1))
-            test_prediction = svc.predict(test_features)
+    fig = plt.figure()
+    plt.subplot(121)
+    plt.imshow(draw_img)
+    plt.title('Car Positions')
+    plt.subplot(122)
+    plt.imshow(clipped, cmap='hot')
+    plt.title('Heat Map')
+    fig.tight_layout()
+    plt.show()
+    cv2.waitKey()
 
-            if test_prediction == 1:
-                xbox_left = np.int(xleft*scale)
-                ytop_draw = np.int(ytop*scale)
-                win_draw = np.int(window*scale)
-                cv2.rectangle(draw_img,(xbox_left, ytop_draw+ystart),(xbox_left+win_draw,ytop_draw+win_draw+ystart),(0,0,255),6)
+def process_video(video_filename, svc, X_scaler, use_features, scan_params):
 
-    return draw_img
+    def process_video_image(img):
+        global current_video_frame
+        img = utils.img_reverse_channels(img)
+        draw_img, clipped, detections = process_image(img, svc, X_scaler, use_features, scan_params)
+        cv2.imwrite('output_images/debug/{:04d}.png'.format(current_video_frame), clipped)
+        current_video_frame += 1
+        return utils.img_reverse_channels(draw_img)
+
+    from moviepy.editor import VideoFileClip
+    global current_video_frame, poly_log
+
+    current_video_frame = 0
+    utils.make_dir(c.output_folder)
+
+    input_video = video_filename
+    output_video = '{}/{}'.format(c.output_folder, video_filename)
+
+    clip = VideoFileClip(input_video)
+    processed_clip = clip.fl_image(process_video_image)
+    processed_clip.write_videofile(output_video, audio=False)
+
+    # write polygon data for debugging
+    # utils.write_csv('poly_log.csv', poly_log)
 
 if __name__=='__main__':
-    # preprocess()
-    # sys.exit(0)
+    do_preprocess = False
+    do_fit = False
+
+    if do_preprocess:
+        preprocess()
+
+    # use_features = {
+    #     c.hists: [[c.hls_index, 1],
+    #               [c.hls_index, 2]],
+    #     c.sbins: [c.hls_index,
+    #               c.xyz_index,
+    #               c.luv_index],
+    #     c.hogs: [[c.luv_index, 0],
+    #             [c.luv_index, 1],
+    #             [c.luv_index, 2]]
+    # }
 
     use_features = {
-        c.hists: [[c.hls_index, 1],
-                  [c.hls_index, 2]],
-        c.sbins: [c.hls_index,
-                  c.xyz_index,
-                  c.luv_index],
+        c.hists: [[c.luv_index, 0],
+                  [c.luv_index, 1],
+                  [c.luv_index, 2]],
+        c.sbins: [c.luv_index],
         c.hogs: [[c.luv_index, 0],
                 [c.luv_index, 1],
                 [c.luv_index, 2]]
     }
 
-    X, y, X_scaler = feat.get_features(use_features)
 
-    from sklearn.svm import LinearSVC
-    from sklearn.svm import SVC
-    from sklearn.model_selection import train_test_split
-    import time
+    X_scaler = None
+    svc = None
 
-    print('X:', X.shape)
-    print('y:', y.shape)
+    if do_fit:
+        X, y, X_scaler = feat.get_features(use_features)
 
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+        from sklearn.svm import LinearSVC
+        from sklearn.svm import SVC
+        from sklearn.model_selection import train_test_split
+        import time
 
-    svc = LinearSVC(True)
-    # svc = SVC(probability=True)
-    t=time.time()
-    svc.fit(X_train, y_train)
-    t2 = time.time()
-    print(round(t2-t, 2), 'Seconds to train SVC...')
-    print('Test Accuracy of SVC = ', round(svc.score(X_test, y_test), 4))
+        print('X:', X.shape)
+        print('y:', y.shape)
 
-    utils.pickle_data(c.x_scaler_p, X_scaler)
-    utils.pickle_data(c.svm_p, svc)
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
+        svc = LinearSVC()
+        # svc = SVC(probability=True)
+        t=time.time()
+        svc.fit(X_train, y_train)
 
-    # vehicle_images = utils.unpickle_data(c.vehicles_train_data_p)
-    # non_vehicle_images = utils.unpickle_data(c.non_vehicles_train_data_p)
-    # print('vehicle images: ',vehicle_images.shape)
-    # print('non_vehicle images: ',non_vehicle_images.shape)
+        print('SVC fit time: {:.2f}s'.format(time.time()-t))
+        print('SVC test accuracy: {:.4f}'.format(svc.score(X_test, y_test)))
 
+        utils.pickle_data(c.x_scaler_p, X_scaler)
+        utils.pickle_data(c.svm_p, svc)
+    else:
+        X_scaler = utils.unpickle_data(c.x_scaler_p)
+        svc = utils.unpickle_data(c.svm_p)
 
-    # use_features = {
-    #     'hists': [[c.hls_index, 2],
-    #               [c.xyz_index, 0],
-    #               [c.luv_index, 0]]
-    # }
+    # define scan regions and window sizes (y_from, y_to, window_size)
+    # scan_params = [
+    #     (400,400+64,64),
+    #     (400,400+128,96),
+    #     (400,400+192,128),
+    #     (400,400+256,160),
+    #     (400,400+256,256)
+    # ]
+    scan_params = [
+        (400,400+128,48),
+        (400,400+256,64),
+        (400,400+256,128),
+        (400,400+256,160),
+        (400,400+256,256)
+    ]
 
-    # vehicle_features = combine_features(vehicle_hists, vehicle_sbins, vehicle_hogs,
-    #                                     sel_hists = [[c.hls_index, 2],
-    #                                                 [c.xyz_index, 0],
-    #                                                 [c.luv_index, 0]],
-    #                                     sel_sbins = [c.hls_index,
-    #                                                  c.xyz_index,
-    #                                                  c.luv_index],
-    #                                     sel_hogs=True)
+    # test_image(svc, X_scaler, use_features, scan_params)
 
-    # non_vehicle_features = combine_features(non_vehicle_hists, non_vehicle_sbins, non_vehicle_hogs,
-    #                                         sel_hists = [[c.hls_index, 2],
-    #                                                     [c.xyz_index, 0],
-    #                                                     [c.luv_index, 0]],
-    #                                         sel_sbins = [c.hls_index,
-    #                                                     c.xyz_index,
-    #                                                     c.luv_index],
-    #                                         sel_hogs=True)
+    process_video(c.test_video, svc, X_scaler, use_features, scan_params)
+    # process_video(c.project_video, svc, X_scaler, use_features, scan_params)
 
-
-    # print('vehicle feautures:',vehicle_features.shape)
-    # print('non_vehicle feautures:',non_vehicle_features.shape)
-
-    # X = np.concatenate((vehicle_features, non_vehicle_features))
-    # y = np.concatenate((np.ones(vehicle_features.shape[0]), np.zeros(non_vehicle_features.shape[0])))
-
-    # X_scaler = StandardScaler().fit(X)
-
-    # X = X_scaler.transform(X)
-
-
-    # print('X:', X.shape)
-    # print('y:', y.shape)
-
-    # X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-
-    # svc = LinearSVC()
-    # t=time.time()
-    # svc.fit(X_train, y_train)
-    # t2 = time.time()
-    # print(round(t2-t, 2), 'Seconds to train SVC...')
-    # print('Test Accuracy of SVC = ', round(svc.score(X_test, y_test), 4))
-
-    # t=time.time()
-    # n_predict = 1000
-    # print('My SVC predicts: ', svc.predict(X_test[0:n_predict]))
-    # print('For these',n_predict, 'labels: ', y_test[0:n_predict])
-    # t2 = time.time()
-    # print(round(t2-t, 5), 'Seconds to predict', n_predict,'labels with SVC')

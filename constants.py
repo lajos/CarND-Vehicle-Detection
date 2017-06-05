@@ -17,7 +17,11 @@ vehicles_hog_p = train_data_folder + '/vehicles_hog.z'
 non_vehicles_hog_p = train_data_folder + '/non_vehicles_hog.z'
 svm_p = train_data_folder + '/svm.z'
 x_scaler_p = train_data_folder + '/x_scaler.z'
+test_detections_p = train_data_folder + '/test_detections.z'
 
+output_folder = 'output_images'
+project_video = 'project_video.mp4'
+test_video = 'test_video.mp4'
 
 # sample size
 sample_size = 64
