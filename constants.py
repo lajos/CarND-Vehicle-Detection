@@ -18,6 +18,7 @@ non_vehicles_hog_p = train_data_folder + '/non_vehicles_hog.z'
 svm_p = train_data_folder + '/svm.z'
 x_scaler_p = train_data_folder + '/x_scaler.z'
 test_detections_p = train_data_folder + '/test_detections.z'
+all_detections_p = train_data_folder + '/all_detections.z'
 
 output_folder = 'output_images'
 project_video = 'project_video.mp4'

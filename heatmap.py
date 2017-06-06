@@ -12,6 +12,8 @@ class HeatMap:
         self.labels = None
 
     def add(self, bbox_list):
+        if bbox_list is None:
+            return
         for box in bbox_list:
             self.heatmap[box[0][1]:box[1][1], box[0][0]:box[1][0]] += 1
 
@@ -38,7 +40,7 @@ class HeatMap:
         return img
 
 if __name__=='__main__':
-    img_bgr = cv2.imread('{}/0001.png'.format(c.test_video_images_folder))
+    img_bgr = cv2.imread('{}/0553.png'.format(c.project_video_images_folder))
     img = img_bgr.copy()
 
     # cv2.imshow('test', img_bgr)
@@ -51,7 +53,7 @@ if __name__=='__main__':
     print(detections.shape)
 
     heatmap.add(detections)
-    heatmap.threshold(5)
+    heatmap.threshold(1)
     heatmap.label()
 
     clipped = heatmap.get_clipped()
@@ -64,7 +66,7 @@ if __name__=='__main__':
 
     draw_img = utils.img_reverse_channels(draw_img)
 
-    fig = plt.figure()
+    fig = plt.figure(figsize=(20, 10), dpi=72)
     plt.subplot(121)
     plt.imshow(draw_img)
     plt.title('Car Positions')
