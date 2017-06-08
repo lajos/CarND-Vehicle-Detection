@@ -90,7 +90,7 @@ def multispace_hog_images(images, output_file=None, orient=8, pix_per_cell=8, ce
     return hogs
 
 if __name__ == '__main__':
-    img_bgr = cv2.imread('{}/GTI_MiddleClose/image0185.png'.format(c.vehicles_train_data_folder))
+    img_bgr = cv2.imread('{}/GTI_MiddleClose/image0196.png'.format(c.vehicles_train_data_folder))
 
     # cv2.imshow('binning', img_bgr)
     # cv2.waitKey()
@@ -106,9 +106,9 @@ if __name__ == '__main__':
     # Plot the examples
     fig = plt.figure()
     plt.subplot(121)
-    plt.imshow(img_l, cmap='gray')
-    plt.title('source')
+    plt.imshow(img_bgr[:,:,[2,1,0]]) #, cmap='gray')
+    plt.title('image')
     plt.subplot(122)
     plt.imshow(hog_image, cmap='gray')
-    plt.title('hog')
+    plt.title('HOG')
     plt.show()

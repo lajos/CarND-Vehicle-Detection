@@ -1,41 +1,52 @@
 import utils, hog, histogram, binning
 import constants as c
 import numpy as np
-import cv2, sys, time
+import cv2, sys, time, os, glob
 import matplotlib.pyplot as plt
-
+import heatmap
 
 def slide_windows(images, hogs, use_features, scale):
     img_shape = np.array([x for x in images if x is not None][0].shape)
     img_w = img_shape[1]
     img_h = img_shape[0]
 
-    # calculate hog box counts
+    # print('img shape:',img_shape)
+
+    # calculate hog block counts
     n_blocks = (img_shape[:2] / c.hog_pix_per_cell).astype(int) - c.hog_cell_per_block + 1
     n_x_blocks = n_blocks[1]
     n_y_blocks = n_blocks[0]
 
-    # hog features per block
-    n_feat_per_block = c.hog_orient*c.hog_cell_per_block**2
+    # print('n_blocks:', n_blocks)
 
     window_size = c.sample_size
     n_blocks_per_window = (window_size // c.hog_pix_per_cell) - c.hog_cell_per_block + 1
     cells_per_step = 4  # Instead of overlap, define how many cells to step
-    n_steps = ((n_blocks - n_blocks_per_window) / cells_per_step).astype(int)
 
+    n_steps = ((n_blocks - n_blocks_per_window) / cells_per_step).astype(int)
     n_x_steps = n_steps[1]
     n_y_steps = n_steps[0]
+
+    min_lightness = 14 * window_size * window_size
+
+    # print('n_blocks_per_window:',n_blocks_per_window)
+    # print('n_steps:', n_steps)
 
     # print('sliding:', window_size*scale, n_blocks, n_blocks_per_window, n_steps)
 
     detections = []
-    for xb in range(n_x_steps//2, n_x_steps):
-        for yb in range(n_y_steps):
-            y_pos = yb*cells_per_step
-            x_pos = xb*cells_per_step
+    for x_pos in range(n_x_blocks%cells_per_step, n_x_blocks-n_blocks_per_window+1, cells_per_step):
+        for y_pos in range(n_y_blocks%cells_per_step, n_y_blocks-n_blocks_per_window+1, cells_per_step):
+
+            # print('xy pos:',x_pos,y_pos)
 
             x_left = x_pos * c.hog_pix_per_cell
             y_top = y_pos * c.hog_pix_per_cell
+
+            # reject very dark samples
+            sub_img = images[c.luv_index][:,:,0][y_top:y_top+window_size, x_left:x_left+window_size]
+            if np.sum(sub_img) < min_lightness:
+                continue
 
             features=np.zeros(1, dtype=np.float32)       # "empty" features to concat to
 
@@ -66,7 +77,9 @@ def slide_windows(images, hogs, use_features, scale):
                 xbox_left = np.int(x_left*scale)
                 ytop_draw = np.int(y_top*scale)
                 win_draw = np.int(window_size*scale)
-                detections.append( [(xbox_left, ytop_draw),(xbox_left+win_draw,ytop_draw+win_draw)] )
+                detections.append([(xbox_left, ytop_draw),(xbox_left+win_draw,ytop_draw+win_draw)])
+                # sub_img = images[c.luv_index][:,:,0][y_top:y_top+window_size, x_left:x_left+window_size]
+                # print(np.sum(sub_img))
 
     return detections
 
@@ -171,10 +184,9 @@ def find_vehicles(img_bgr, svc_, X_scaler_, use_features, y_from=400, y_to=656, 
     return detections
 
 
-
-if __name__=='__main__':
-    img_bgr = cv2.imread('{}/0726.png'.format(c.project_video_images_folder))
-    # img_bgr = cv2.imread('{}/0982.png'.format(c.project_video_images_folder))
+def test_run(img_bgr, show_result=True, save_false=False, false_threshold=5):
+    # img_bgr = cv2.imread('{}/0250.png'.format(c.project_video_images_folder))
+    img_ori = img_bgr.copy()
 
     # cv2.imshow('test', img_bgr)
     # cv2.waitKey()
@@ -195,15 +207,14 @@ if __name__=='__main__':
     }
 
     scan_params = [
-        # (400,400+128,48),
-        # (400,400+256,64),
-        # (400,400+256,80),
-        # (400,400+256,96),
-        # (400,400+256,112),
-        # (400,400+256,128),
-        # (400,400+256,144),
+        (400,400+128,48),
+        (400,400+256,64),
+        (400,400+256,80),
+        (400,400+256,96),
+        (400,400+256,112),
+        (400,400+256,128),
+        (400,400+256,144),
         (400,400+256,160)
-
     ]
 
 
@@ -220,17 +231,52 @@ if __name__=='__main__':
 
     if detections is None:
         print('no vehicles detected')
-        sys.exit(0)
+        return
 
     utils.pickle_data(c.test_detections_p, detections)
 
     for i in detections:
         cv2.rectangle(img_bgr,tuple(i[0]),tuple(i[1]),(0,0,255),1)
 
-    cv2.imshow('test', img_bgr)
-    cv2.waitKey()
+    hmap = heatmap.HeatMap(img_bgr.shape[:2])
+    hmap.add(detections)
+
+    h = hmap.heatmap.copy().astype(np.uint8)
+
+    for d in detections:
+        x_pos = d[0][0]
+        y_pos = d[0][1]
+        x_width = d[1][0] - x_pos
+        y_width = d[1][1] - y_pos
+
+        if np.max(h[y_pos:y_pos+y_width, x_pos:x_pos+x_width]) < false_threshold:
+            print('false detection:',d[0])
+            img_false = img_ori[y_pos:y_pos+y_width, x_pos:x_pos+x_width].copy()
+            img_false = cv2.resize(img_false, (64,64))
+            false_glob = glob.glob('{}/*.png'.format(c.non_vehicles_auto_folder))
+            false_name = '0000.png'
+            if len(false_glob):
+                false_glob.sort()
+                false_name = int(os.path.basename(false_glob[-1]).split('.')[0])+1
+                false_name = '{:04d}.png'.format(false_name)
+            if save_false:
+                print(false_name)
+                cv2.imwrite('{}/{}'.format(c.non_vehicles_auto_folder, false_name), img_false)
 
 
-    # out_img = find_cars(img, ystart, ystop, scale, svc, X_scaler, orient, pix_per_cell, cell_per_block, spatial_size, hist_bins)
+    # cv2.imshow('heat',h*16)
 
-    # plt.imshow(out_img)
+    if show_result:
+        cv2.imshow('test', img_bgr)
+        cv2.waitKey()
+
+
+
+if __name__=='__main__':
+    # img_bgr = cv2.imread('{}/1053.png'.format(c.project_video_images_folder))
+    # test_run(img_bgr, show_result=True, save_false=False)
+
+    for i in range(531,549):
+        img_bgr = cv2.imread('{}/{:04d}.png'.format(c.project_video_images_folder, i))
+        test_run(img_bgr, show_result=False, save_false=True, false_threshold=21)
+

@@ -54,17 +54,21 @@ def multispace_histograms_images(images, output_file=None, nbins=32):
 
     return mf_hists
 
-def plot_histograms(features, hist_names=('hist0','hist1','hist2')):
-    fig = plt.figure(figsize=(12,3))
-    subplot_id=101+len(features)*10
+def plot_histograms(img_bgr, features, hist_names=('hist0','hist1','hist2')):
+    fig = plt.figure(figsize=(15,3))
+    subplot_id=101+(len(features)+1)*10
+    plt.subplot(subplot_id)
+    plt.imshow(img_bgr[:,:,[2,1,0]])
+    plt.title('image')
     for i in range(len(features)):
-        plt.subplot(subplot_id+i)
+        ii = i+1
+        plt.subplot(subplot_id+ii)
         plt.title(hist_names[i])
         plt.bar(np.arange(len(features[i])), features[i])
     plt.show()
 
 if __name__=='__main__':
-    img_bgr = cv2.imread('{}/GTI_MiddleClose/image0185.png'.format(c.vehicles_train_data_folder))
+    img_bgr = cv2.imread('{}/GTI_MiddleClose/image0196.png'.format(c.vehicles_train_data_folder))
 
     # cv2.imshow('hist',img_bgr)
     # cv2.waitKey()
@@ -81,12 +85,12 @@ if __name__=='__main__':
     # features = color_histograms(img)
     # plot_histograms(features,('x','y','z'))
 
-    # img = utils.img_bgr2luv(img_bgr)
-    # features = color_histograms(img)
-    # plot_histograms(features,('L','u','v'))
+    img = utils.img_bgr2luv(img_bgr)
+    features = color_histograms(img)
+    plot_histograms(img_bgr, features,('L','u','v'))
 
-    mf = multispace_histograms(img_bgr)
+    # mf = multispace_histograms(img_bgr)
 
-    print(mf)
-    print(mf.shape)
+    # print(mf)
+    # print(mf.shape)
 

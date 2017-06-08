@@ -54,11 +54,7 @@ def process_image(img_bgr, svc, X_scaler, use_features, scan_params):
     if detections is None:
         return img_bgr, np.zeros_like(img_bgr), None
 
-    print(detections.shape)
-
     hmap = heatmap.HeatMap(img_bgr.shape[:2])
-
-    # print(detections.shape)
 
     hmap.add(detections)
     hmap.threshold(0)
@@ -96,7 +92,6 @@ def process_video(video_filename, svc, X_scaler, use_features, scan_params):
         draw_img, clipped, detections = process_image(img, svc, X_scaler, use_features, scan_params)
         all_detections.append(detections)
         cv2.imwrite('output_images/debug/img{:04d}.png'.format(current_video_frame), draw_img)
-        cv2.imwrite('output_images/debug/hmp{:04d}.png'.format(current_video_frame), clipped*4)
         current_video_frame += 1
         return utils.img_reverse_channels(draw_img)
 
@@ -118,7 +113,7 @@ def process_video(video_filename, svc, X_scaler, use_features, scan_params):
 
 
 def process_video_folder(video_folder, svc, X_scaler, use_features, scan_params, start_frame=0, end_frame=None):
-    all_detections = []
+    all_detections = utils.unpickle_data(c.all_detections_p)
 
     video_glob = glob.glob('{}/*.png'.format(video_folder))
     video_glob.sort()
@@ -141,7 +136,10 @@ def process_video_folder(video_folder, svc, X_scaler, use_features, scan_params,
         img_bgr = cv2.imread(video_image_name)
         draw_img, clipped, detections = process_image(img_bgr, svc, X_scaler, use_features, scan_params)
 
-        all_detections.append(detections)
+        if len(all_detections)<=current_frame:
+            all_detections.append(detections)
+        else:
+            all_detections[current_frame]=detections
 
         cv2.imwrite('output_images/debug/img{}'.format(video_image_basename), draw_img)
         cv2.imwrite('output_images/debug/hmp{}'.format(video_image_basename), clipped)
@@ -151,52 +149,54 @@ def process_video_folder(video_folder, svc, X_scaler, use_features, scan_params,
     # save detections for debugging
     utils.pickle_data(c.all_detections_p, all_detections)
 
-def process_detections():
+def process_detections(start_frame=0, end_frame=None):
     video_folder = c.project_video_images_folder
     video_glob = glob.glob('{}/*.png'.format(video_folder))
     video_glob.sort()
+
+    if end_frame is None:
+        end_frame = len(video_glob)
 
     all_detections = utils.unpickle_data(c.all_detections_p)
 
     utils.print_progress_bar (0, len(video_glob), prefix = 'process detections:')
 
-    for i in range(len(video_glob)):
-    # for i in range(500,550):
+    for i in range(start_frame, end_frame):
         video_image_name = video_glob[i]
         video_image_basename = os.path.basename(video_image_name)
 
-        hm = heatmap.HeatMap((720,1280,3))
-        for o in range(max(0,i-10),i+1):
+        img_bgr = cv2.imread(video_image_name)
+        img = img_bgr.copy()
+
+        hm = heatmap.HeatMap(img_bgr.shape[:2])
+        for o in range(max(0,i-16),i):
             hm.add(all_detections[o])
-        hm.threshold(10)
+        hm.threshold(20)
         hm.label()
 
-        img_bgr = cv2.imread(video_image_name)
-        img_bgr = img_bgr // 2
-
-        img_bgr = hm.draw_labeled_bboxes(img_bgr)
+        img_bgr = img_bgr // 1.5
+        img_bgr = hm.draw_labeled_bboxes(img_bgr, min_w=32, min_h=32)
+        img = hm.draw_labeled_bboxes(img, min_w=65, min_h=45)
 
         if all_detections[i] is not None:
             for o in all_detections[i]:
                 cv2.rectangle(img_bgr,tuple(o[0]),tuple(o[1]),(255,0,0),1)
 
-        cv2.imwrite('output_images/debug/img{}'.format(video_image_basename), img_bgr)
+        cv2.imwrite('output_images/debug/dbg{}'.format(video_image_basename), img_bgr)
+        cv2.imwrite('output_images/debug/out{}'.format(video_image_basename), img)
 
-        utils.print_progress_bar (i, len(video_glob), prefix = 'process detections:')
+        utils.print_progress_bar (i, len(video_glob), prefix = 'process detections:', suffix='frame: {:d}'.format(i))
 
 
     utils.print_progress_bar (len(video_glob), len(video_glob), prefix = 'process detections:')
 
-
-
-
-
-if __name__=='__main__':
-    do_preprocess = False
-    do_fit = False
-
-    process_detections()
-    sys.exit(0)
+def main():
+    do_preprocess = True
+    do_fit = True
+    do_process_video_folder = True
+    do_process_detections = True
+    start_frame=0
+    end_frame=None
 
     if do_preprocess:
         preprocess()
@@ -229,7 +229,7 @@ if __name__=='__main__':
 
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=42)
 
-        svc = LinearSVC(verbose=1, random_state=42)
+        svc = LinearSVC(verbose=1, max_iter=5000, random_state=42)
         # svc = LinearSVC(penalty='l1', dual=False, verbose=1, random_state=42)
         # svc = LinearSVC(dual=False, verbose=1, random_state=42)
         # svc = SVC(probability=True)
@@ -251,15 +251,23 @@ if __name__=='__main__':
         (400,400+256,64),
         (400,400+256,80),
         (400,400+256,96),
-        (400,400+256,112)
-        (400,400+256,128)
+        (400,400+256,112),
+        (400,400+256,128),
+        (400,400+256,144),
+        (400,400+256,160)
     ]
 
     # test_image(svc, X_scaler, use_features, scan_params)
 
     # process_video(c.project_video, svc, X_scaler, use_features, scan_params)
 
-    # process_video_folder(c.project_video_images_folder, svc, X_scaler, use_features, scan_params) #, start_frame=600, end_frame=620)
+    if do_process_video_folder:
+        process_video_folder(c.project_video_images_folder, svc, X_scaler, use_features, scan_params, start_frame=start_frame, end_frame=end_frame)
+
+    if do_process_detections:
+        process_detections(start_frame=start_frame, end_frame=end_frame)
 
 
 
+if __name__=='__main__':
+    main()

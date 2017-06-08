@@ -2,6 +2,7 @@
 __pycache__/
 videos/
 output_images/debug/
+output_images/dl/
 
 *.p
 *.z

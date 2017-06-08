@@ -26,7 +26,7 @@ class HeatMap:
     def get_clipped(self):
         return np.clip(self.heatmap, 0, 255).astype(np.uint8)
 
-    def draw_labeled_bboxes(self, img):
+    def draw_labeled_bboxes(self, img, min_w=85, min_h=65):
         for car_number in range(1, self.labels[1]+1):
             # Find pixels with each car_number label value
             nonzero = (self.labels[0] == car_number).nonzero()
@@ -35,6 +35,16 @@ class HeatMap:
             nonzerox = np.array(nonzero[1])
             # Define a bounding box based on min/max x and y
             bbox = ((np.min(nonzerox), np.min(nonzeroy)), (np.max(nonzerox), np.max(nonzeroy)))
+
+            # filter small detections
+            if abs(bbox[0][0]-bbox[1][0])<min_w:
+                continue
+            if abs(bbox[0][1]-bbox[1][1])<min_h:
+                continue
+
+            if bbox[0][0]<img.shape[1]/2:
+                continue
+
             # Draw the box on the image
             cv2.rectangle(img, bbox[0], bbox[1], (0,0,255), 2)
         return img

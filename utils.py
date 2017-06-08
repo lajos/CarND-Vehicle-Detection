@@ -77,6 +77,9 @@ def read_folder_images(folder_name):
         images.append(cv2.imread(i))
     return images
 
+def img_normalize(img):
+    return(img/255.0-0.5)
+
 def img_reverse_channels(img):
     return img[:,:,[2,1,0]].copy()
 
