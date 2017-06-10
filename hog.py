@@ -6,6 +6,7 @@ import utils
 import numpy as np
 
 def hog_features(img, orient=8, pix_per_cell=8, cell_per_block=2, transform_sqrt=True, vis=False, flatten=False):
+    """calculate hog features for an image"""
     if vis == True:
         features, hog_image = hog(img, orientations=orient, pixels_per_cell=(pix_per_cell, pix_per_cell),
                                   cells_per_block=(cell_per_block, cell_per_block), transform_sqrt=transform_sqrt,

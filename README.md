@@ -100,7 +100,14 @@ For each image in the data set I used the following features:
 | HOG           | CIELUV      | u        |
 | HOG           | CIELUV      | v        |
 
-I reshaped the features into 1D arrays if necessary and concatenated them.
+For each sample I reshaped the features into 1D arrays if necessary and concatenated them.
+
+I also created an array of corresponding labels, **1** denoting vehicle features, **0** for non-vehicles.
+
+The shape of the training data:
+
+* **X** (features): (18542, 10976)
+* **y** (labels): (18542, )
 
 (The features are prepared in the `combine_features` function of `feat.py` using precalculated features from `hog.py`, `histogram.py` and `binning.py` modules.)
 
@@ -112,90 +119,171 @@ I've tested several [sklearn.svm.SVC](http://scikit-learn.org/stable/modules/gen
 
 I trained the SVM to **5,000** iterations and got a test accuracy of **98.62%**.
 
-(The code is in the `main` function of `main.py`.)
+(The SVM training code is in the `main` function of `main.py`.)
 
 ---
-
-
-## [Rubric](https://review.udacity.com/#!/rubrics/513/view) Points
-### Here I will consider the rubric points individually and describe how I addressed each point in my implementation.
-
----
-### Writeup / README
-
-#### 1. Provide a Writeup / README that includes all the rubric points and how you addressed each one.  You can submit your writeup as markdown or pdf.  [Here](https://github.com/udacity/CarND-Vehicle-Detection/blob/master/writeup_template.md) is a template writeup for this project you can use as a guide and a starting point.
-
-You're reading it!
-
-### Histogram of Oriented Gradients (HOG)
-
-####1. Explain how (and identify where in your code) you extracted HOG features from the training images.
-
-The code for this step is contained in the first code cell of the IPython notebook (or in lines # through # of the file called `some_file.py`).
-
-I started by reading in all the `vehicle` and `non-vehicle` images.  Here is an example of one of each of the `vehicle` and `non-vehicle` classes:
-
-![alt text][image1]
-
-I then explored different color spaces and different `skimage.hog()` parameters (`orientations`, `pixels_per_cell`, and `cells_per_block`).  I grabbed random images from each of the two classes and displayed them to get a feel for what the `skimage.hog()` output looks like.
-
-Here is an example using the `YCrCb` color space and HOG parameters of `orientations=8`, `pixels_per_cell=(8, 8)` and `cells_per_block=(2, 2)`:
-
-
-![alt text][image2]
-
-#### 2. Explain how you settled on your final choice of HOG parameters.
-
-I tried various combinations of parameters and...
-
-#### 3. Describe how (and identify where in your code) you trained a classifier using your selected HOG features (and color features if you used them).
-
-I trained a linear SVM using...
 
 ### Sliding Window Search
 
-#### 1. Describe how (and identify where in your code) you implemented a sliding window search.  How did you decide what scales to search and how much to overlap windows?
+I used a sliding window to find regions of the video frames that contain vehicles. I used a window size of (64, 64), which is the size of the SVM training samples. To create the stride for the search, I divided the video frame into a grid. For each grid point I extracted a subimage in the shape of the search window.
 
-I decided to search random window positions at random scales all over the image and came up with this (ok just kidding I didn't actually ;):
+![sliding window](writeup_assets/sliding_window.png)
 
-![alt text][image3]
+*(64, 64) search window (red square) moving horizontally across the image with (32, 32) stride (previous search windows overlap due to stride)*
 
-#### 2. Show some examples of test images to demonstrate how your pipeline is working.  What did you do to optimize the performance of your classifier?
+The stride in the actual implementation is based on the HOG cell size. This allows the HOG to be calculated once for the whole frame and the HOG features extracted for the subimage to save processing time.
 
-Ultimately I searched on two scales using YCrCb 3-channel HOG features plus spatially binned color and histograms of color in the feature vector, which provided a nice result.  Here are some example images:
+For each window the same feature types are calculated and concatenated as in the training data preparation step.
 
-![alt text][image4]
----
+The resulting feature vector is evaluated by the trained SVM (`sklearn.svm.LinearSVC.predict` function). If the classifier predicts a vehicle, that region is saved in a list of detections.
 
-### Video Implementation
+To match larger and smaller regions than the (64, 64) window, additional sliding window searches are performed on the video frame where the video frame is scaled down (for larger regions) or up (for smaller regions). For example, to predict (128, 128) regions, the video frame is scaled to 50% of it's original size ( (1280, 720) -> (640, 360) ) and searched with the default (64, 64) window size.
 
-####1. Provide a link to your final video output.  Your pipeline should perform reasonably well on the entire project video (somewhat wobbly or unstable bounding boxes are ok as long as you are identifying the vehicles most of the time with minimal false positives.)
-Here's a [link to my video result](./project_video.mp4)
+I have used a combination of these search sizes:
 
 
-####2. Describe how (and identify where in your code) you implemented some kind of filter for false positives and some method for combining overlapping bounding boxes.
+| Search Size |
+| ----------- |
+| (48, 48)    |
+| (64, 64)    |
+| (80, 80)    |
+| (96, 96)    |
+| (112, 112)  |
+| (128, 128)  |
+| (144, 144)  |
+| (160, 160)  |
 
-I recorded the positions of positive detections in each frame of the video.  From the positive detections I created a heatmap and then thresholded that map to identify vehicle positions.  I then used `scipy.ndimage.measurements.label()` to identify individual blobs in the heatmap.  I then assumed each blob corresponded to a vehicle.  I constructed bounding boxes to cover the area of each blob detected.
-
-Here's an example result showing the heatmap from a series of frames of video, the result of `scipy.ndimage.measurements.label()` and the bounding boxes then overlaid on the last frame of video:
-
-### Here are six frames and their corresponding heatmaps:
-
-![alt text][image5]
-
-### Here is the output of `scipy.ndimage.measurements.label()` on the integrated heatmap from all six frames:
-![alt text][image6]
-
-### Here the resulting bounding boxes are drawn onto the last frame in the series:
-![alt text][image7]
-
-
+The sliding window search is implemented in the `slide_windows` function of the `classify.py` module.
 
 ---
 
-###Discussion
+### Finding Vehicle Regions
 
-####1. Briefly discuss any problems / issues you faced in your implementation of this project.  Where will your pipeline likely fail?  What could you do to make it more robust?
+For each vehicle the sliding window search results in multiple detections.
 
-Here I'll talk about the approach I took, what techniques I used, what worked and why, where the pipeline might fail and how I might improve it if I were going to pursue this project further.
+![detections](writeup_assets/det0502.png)
+
+*All detections for a frame*
+
+To find the bounding box of the detections, the detected regions are added to a heatmap. To remove low confidence detections, low areas of the heatmap are discarded (`HeatMap.threshold` function in `heatmap.py`). The distinct regions in the heatmap are labeled using [`scipy.ndimage.measurements.label`](https://docs.scipy.org/doc/scipy-0.16.0/reference/generated/scipy.ndimage.measurements.label.html). As a last step a bounding box is drawn for each labeled area.
+
+![heatmap](writeup_assets/hmp0502.png)
+
+*Detected bounding box and corresponding heatmap.*
+
+The heatmap functions are implemented in the `heatmap.py` module.
+
+---
+
+### False Detections
+
+I've used several method to eliminate false detections.
+
+* The classifier has a hard time with really dark windows. I discard windows where the average lightness intensity is below a certain level.
+
+* Only the region below the horizon is searched.
+
+* Labeled areas with small very small sizes are discarded.
+
+* For each frame I add the detections from a range of previous frame. This allows detection of false positives that appear for a short period of time and also smoothes the calculated bounding box.
+
+![range detection](writeup_assets/dbg0502.png)
+
+*Detections from a range of 16 frames (blue) and calculated bounding box (red) after thresholding.*
+
+---
+
+### Future Enhancements
+
+My current pipeline is slow, so it wouldn't work in a real time application. Possible optimizations:
+
+* Test if less feature types would be sufficient.
+* Test other color spaces.
+* Further adjust HOG parameters to try to speed up HOG calculation.
+* Use multiple processes for sliding window search.
+* Track detected areas and in subsequent frames search only that region.
+* Use less window size passes for sliding window search.
+
+---
+
+## Deep Learning Convolution Method
+
+During this term we've used [convolutional neural networks](https://en.wikipedia.org/wiki/Convolutional_neural_network)  to classify traffic signs with pretty good accuracy. I decided to try using a CNN to classify vehicle regions in the video frames.
+
+I've found several papers on the internet about using CNNs for image segmentation and classification. Examples: [Fully Convolutional Networks for Semantic Segmentation](https://people.eecs.berkeley.edu/~jonlong/long_shelhamer_fcn.pdf), [Fast Image Scanning with
+Deep Max-Pooling Convolutional Neural Networks](https://arxiv.org/pdf/1302.1700.pdf).
+
+Convolutional layers automatically scan the images similar to the sliding window approach.
+
+---
+
+### Model
+
+I setup a model with the input size of our training samples (64, 64, 3) using `Convolution2D` layers. I labeled the vehicle images **1** and the non-vehicle images **-1** and used `tanh` as the activation function on the last convolutional layers that has an output range of [-1..1]. The output layer is a `Flatten` layer that converts the output shape of the last `Convolution2D` layer from (1, 1, 1) to (1,). I trained the network to classify the samples and saved the weights.
+
+![dl network train](writeup_assets/dl_network_train.png)
+
+*A simplified model with two convolutional layers.*
+
+My training model uses the following layers:
+
+| layer | parameters  | output shape |
+| ----- | ----------- | ------------ |
+|Conv2D|depth: 8, stride: (3, 3), activation: elu|(64, 64, 8)|
+|Conv2D|depth: 16, stride: (3, 3), activation: elu|(64, 64, 16)|
+|MaxPooling2D|pool size: (8, 8), stride: (8, 8)|(8, 8, 16)|
+|Dropout|rate: 0.30|(8, 8, 16)|
+|Conv2D|depth: 128, stride: (8, 8), activation: elu|(1, 1, 128)|
+|Dropout|rate: 0.30|(1, 1, 128)|
+|Conv2D|depth: 1, stride: (1, 1), activation: tanh|(1, 1, 1)|
+|Flatten||(1,)|
+
+For prediction I used the same model with input shape of (None, None, 3) without the `Flatten` layer because we want to use the output of the last `Convolution2D`. This model uses the weights saved from the trained model.
+
+![dl network predict](writeup_assets/dl_network_predict.png)
+
+My prediction model uses the following layers:
+
+| layer | parameters  | output shape |
+| ----- | ----------- | ------------ |
+|Conv2D|depth: 8, stride: (3, 3), activation: elu|(None, None, 8)|
+|Conv2D|depth: 16, stride: (3, 3), activation: elu|(None, None, 16)|
+|MaxPooling2D|pool size: (8, 8), stride: (8, 8)|(None, None, 16)|
+|Dropout|rate: 0.20|(None, None, 16)|
+|Conv2D|depth: 128, stride: (8, 8), activation: elu|(None, None, 128)|
+|Dropout|rate: 0.20|(None, None, 128)|
+|Conv2D|depth: 1, stride: (1, 1), activation: tanh|(None, None, 1)|
+
+---
+
+### Preprocessing and Training
+
+I used the same data to train the model:
+
+* **Vehicle samples:** 8,832
+* **Non-vehicle samples:** 9,710
+
+I converted the sample images to [CIELUV](https://en.wikipedia.org/wiki/CIELUV) color space.
+
+I trained the model using the [mean squared error](https://keras.io/losses/) loss function with the [Adam](https://keras.io/optimizers/) optimizer and split **20%** of the samples for validation. The model trained for **16** epochs, reshuffling the samples between epochs. The final validation accuracy is **99.35%**.
+
+---
+
+### Prediction
+
+The output of the model is a grid with prediction values corresponding to areas in the video frames. Values close to **1** indicate areas of vehicles.
+
+![dl heat and predictions](writeup_assets/dl_heat.png)
+
+*Output of model (left) and detected vehicle regions (right).*
+
+The detections are then added to a heatmap, thresholded and bounding boxes for the vehicles are drawn using the same process as in the sliding window method.
+
+![dl detection](writeup_assets/hmp0961.png)
+
+*Detected vehicle bounding boxes.*
+
+The deep learning method is implemented in `dl.py` and uses the same `heatmap.py` module and some utility functions from `utils.py`.
+
+---
 

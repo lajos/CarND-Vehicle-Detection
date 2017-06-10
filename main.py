@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 np.set_printoptions(suppress=True)
 
 def make_image_pickle(folder, output_file, expected_shape=None):
+    """save images into a pickle file for faster loading"""
     images = []
     print('make image pickle: {}/** -> {}'.format(folder, output_file))
     for i in glob.iglob('{}/**/*.png'.format(folder), recursive=True):
@@ -27,6 +28,7 @@ def make_image_pickle(folder, output_file, expected_shape=None):
     return images
 
 def preprocess():
+    """preprocess training images, create all histograms, sbins and hogs"""
     # preload image data to speed up processing for testing
     # vehicle_images = utils.unpickle_data(c.vehicles_train_data_p)
     # non_vehicle_images = utils.unpickle_data(c.non_vehicles_train_data_p)
@@ -42,6 +44,7 @@ def preprocess():
 
 
 def process_image(img_bgr, svc, X_scaler, use_features, scan_params):
+    """detect vehicle areas in an image"""
     detections = None
     for sp in scan_params:
         d = classify.find_vehicles(img_bgr, svc, X_scaler, use_features, sp[0], sp[1], sp[2])
@@ -68,6 +71,7 @@ def process_image(img_bgr, svc, X_scaler, use_features, scan_params):
 
 
 def test_image(svc, X_scaler, use_features, scan_params):
+    """run detection on a single image for testing"""
     img_bgr = cv2.imread('{}/0001.png'.format(c.test_video_images_folder))
 
     draw_img, clipped, detections = process_image(img_bgr, svc, X_scaler, use_features, scan_params)
@@ -84,6 +88,7 @@ def test_image(svc, X_scaler, use_features, scan_params):
     cv2.waitKey()
 
 def process_video(video_filename, svc, X_scaler, use_features, scan_params):
+    """detect vehicles in a video file"""
     all_detections = []
 
     def process_video_image(img):
@@ -113,6 +118,7 @@ def process_video(video_filename, svc, X_scaler, use_features, scan_params):
 
 
 def process_video_folder(video_folder, svc, X_scaler, use_features, scan_params, start_frame=0, end_frame=None):
+    """detect vehicle areas in a folder of images"""
     all_detections = utils.unpickle_data(c.all_detections_p)
 
     video_glob = glob.glob('{}/*.png'.format(video_folder))
@@ -150,6 +156,7 @@ def process_video_folder(video_folder, svc, X_scaler, use_features, scan_params,
     utils.pickle_data(c.all_detections_p, all_detections)
 
 def process_detections(start_frame=0, end_frame=None):
+    """use heatmap to find vehicles based on detections, average detection over frame range"""
     video_folder = c.project_video_images_folder
     video_glob = glob.glob('{}/*.png'.format(video_folder))
     video_glob.sort()

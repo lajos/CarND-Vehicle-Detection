@@ -1,11 +1,12 @@
 import utils, hog, histogram, binning
 import constants as c
 import numpy as np
-import cv2, sys, time, os, glob
+import cv2, sys, time, os, glob, time
 import matplotlib.pyplot as plt
 import heatmap
 
 def slide_windows(images, hogs, use_features, scale):
+    """slide window over image and find vehicle areas"""
     img_shape = np.array([x for x in images if x is not None][0].shape)
     img_w = img_shape[1]
     img_h = img_shape[0]
@@ -150,6 +151,7 @@ def get_hogs(channels, use_features):
 
 
 def find_vehicles(img_bgr, svc_, X_scaler_, use_features, y_from=400, y_to=656, window_size=64):
+    """detect vehicles in an image, scaling image to allow smaller/larger detection window"""
     global X_scaler, svc
     X_scaler = X_scaler_
     svc = svc_
@@ -185,6 +187,7 @@ def find_vehicles(img_bgr, svc_, X_scaler_, use_features, y_from=400, y_to=656, 
 
 
 def test_run(img_bgr, show_result=True, save_false=False, false_threshold=5):
+    """test detection on an image"""
     # img_bgr = cv2.imread('{}/0250.png'.format(c.project_video_images_folder))
     img_ori = img_bgr.copy()
 
@@ -217,6 +220,7 @@ def test_run(img_bgr, show_result=True, save_false=False, false_threshold=5):
         (400,400+256,160)
     ]
 
+    start_time = time.time()
 
     detections = None
     for sp in scan_params:
@@ -226,6 +230,7 @@ def test_run(img_bgr, show_result=True, save_false=False, false_threshold=5):
                 detections = d
             else:
                 detections = np.concatenate((detections, d), axis=0)
+    print('detection time: {:.2f}'.format(time.time()-start_time))
 
     print(detections.shape)
 
@@ -273,10 +278,11 @@ def test_run(img_bgr, show_result=True, save_false=False, false_threshold=5):
 
 
 if __name__=='__main__':
-    # img_bgr = cv2.imread('{}/1053.png'.format(c.project_video_images_folder))
-    # test_run(img_bgr, show_result=True, save_false=False)
+    img_bgr = cv2.imread('{}/0502.png'.format(c.project_video_images_folder))
+    test_run(img_bgr, show_result=True, save_false=False)
+    cv2.imwrite('test.png',img_bgr)
 
-    for i in range(531,549):
-        img_bgr = cv2.imread('{}/{:04d}.png'.format(c.project_video_images_folder, i))
-        test_run(img_bgr, show_result=False, save_false=True, false_threshold=21)
+    # for i in range(531,549):
+    #     img_bgr = cv2.imread('{}/{:04d}.png'.format(c.project_video_images_folder, i))
+    #     test_run(img_bgr, show_result=False, save_false=True, false_threshold=21)
 

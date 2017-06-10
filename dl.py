@@ -13,6 +13,7 @@ np.set_printoptions(suppress=True)
 
 
 def img_normalize(img):
+    """normalize image to [-0.5...0.5] range"""
     return img/255.0-0.5
 
 def preprocess_images(images):
@@ -47,6 +48,7 @@ def load_train_data(preprocess=True):
     return X,y
 
 def build_model(input_shape=(64,64,3), dropout=0.2, with_flatten=True):
+    """create keras model with optional flatten layer"""
     model = Sequential()
     model.add(Convolution2D(8, (3,3), input_shape=input_shape, activation='elu', padding='same'))
     model.add(Convolution2D(16, (3,3), activation='elu', padding='same'))
@@ -60,8 +62,7 @@ def build_model(input_shape=(64,64,3), dropout=0.2, with_flatten=True):
     return model
 
 def find_vehicles_image(model, img_bgr, scales = [1.0], y_from=400, y_to=656):
-    scales = [0.8, 1.0, 1.5, 2.0]
-
+    """detect vehicle areas in image"""
     img = img_bgr[y_from:y_to,:,:]
     img = utils.img_bgr2luv(img)
     img = img_normalize(img)
@@ -81,6 +82,9 @@ def find_vehicles_image(model, img_bgr, scales = [1.0], y_from=400, y_to=656):
 
         p = model.predict(img_scaled[None,:,:,:])
 
+        # show the output
+        # from pylab import rcParams
+        # rcParams['figure.figsize'] = 12.8, 7.2
         # plt.imshow(p[0,:,:,0], cmap='hot')
         # plt.show()
 
@@ -103,6 +107,7 @@ def draw_detections(img_bgr, detections):
     return draw_img
 
 def draw_heatmap(img_bgr, detections, threshold=8, frame_number=None, all_detections=None, n_frames=None):
+    """add detections to heatmap, average accross n_frames and draw labeled areas"""
     hm = HeatMap(img_bgr.shape[:2])
 
     if frame_number is None:
@@ -113,9 +118,10 @@ def draw_heatmap(img_bgr, detections, threshold=8, frame_number=None, all_detect
 
     hm.threshold(threshold)
     hm.label()
-    return hm.draw_labeled_bboxes(img_bgr.copy(), min_w=32, min_h=32)
+    return hm.draw_labeled_bboxes(img_bgr.copy(), min_w=64, min_h=64)
 
 def find_vehicles_folder(model, input_folder, output_folder, start_frame=0, end_frame=None, scales = [1.0], y_from=400, y_to=656):
+    """find vehicles in a folder of images"""
     utils.make_dir(output_folder)
 
     all_detections = utils.unpickle_data(c.dl_detections_p)
@@ -149,7 +155,8 @@ def find_vehicles_folder(model, input_folder, output_folder, start_frame=0, end_
         detections = find_vehicles_image(model, img_bgr, scales=scales, y_from=y_from, y_to=y_to)
 
         draw_img = draw_detections(img_bgr, detections)
-        hmap_img = draw_heatmap(img_bgr, detections, threshold=9, frame_number=current_frame, all_detections=all_detections, n_frames=5)
+        # draw averaged, thresholded heatmap
+        hmap_img = draw_heatmap(img_bgr, detections, threshold=16, frame_number=current_frame, all_detections=all_detections, n_frames=5)
 
         if len(all_detections)<=current_frame:
             all_detections.append(detections)
@@ -167,9 +174,15 @@ def find_vehicles_folder(model, input_folder, output_folder, start_frame=0, end_
     utils.pickle_data(c.dl_detections_p, all_detections)
 
 def test_run(model, img_bgr, show_result=True, save_false=False, false_threshold=5):
+    """test detection on single image, optionally display result and save false positives below threshold"""
     img_ori = img_bgr.copy()
 
-    detections = find_vehicles_image(model, img_bgr, scales = [1.0], y_from=400, y_to=656)
+    # detections = find_vehicles_image(model, img_bgr, scales = [1.0], y_from=400, y_to=656)
+
+    start_time = time.time()
+    detections = find_vehicles_image(model, img_bgr, scales = [1.0], y_from=0, y_to=720)
+    print('detection time: {:.2f}'.format(time.time()-start_time))
+
 
     if detections is None:
         print('no vehicles detected')
@@ -205,14 +218,33 @@ def test_run(model, img_bgr, show_result=True, save_false=False, false_threshold
 
 
     # cv2.imshow('heat',h*16)
+    # cv2.waitKey()
 
     if show_result:
         cv2.imshow('test', img_bgr)
         cv2.waitKey()
 
+def model_summary_md(model):
+    """print model summary in markdown format"""
+    def get_layer_params(layer):
+        c = layer.get_config()
+        if l.__class__.__name__=='Conv2D':
+            return 'depth: {}, stride: {}, activation: {}'.format(c['filters'], c['kernel_size'], c['activation'])
+        elif l.__class__.__name__=='Dropout':
+            return 'rate: {:.2f}'.format(c['rate'])
+        elif l.__class__.__name__=='MaxPooling2D':
+            return 'pool size: {}, stride: {}'.format(c['pool_size'], c['strides'])
+        return ''
+    print('| layer | parameters  | output shape |')
+    print('| ----- | ----------- | ------------ |')
+    for l in model.layers:
+        print('|{}|{}|{}|'.format(l.__class__.__name__,get_layer_params(l),l.output_shape[1:]))
+        # print(l.__class__.__name__)
+        # print(l.get_config())
+
 if __name__=='__main__':
-    do_preprocess = False
-    do_train = False
+    do_preprocess = True
+    do_train = True
     do_test = False
 
     if do_train:
@@ -225,6 +257,7 @@ if __name__=='__main__':
         model.compile(loss='mse',optimizer='adam',metrics=['accuracy'])
 
         print(model.summary())
+        model_summary_md(model)
 
         for i in range(16):
             print('epoch:',i)
@@ -235,14 +268,16 @@ if __name__=='__main__':
     model = build_model(input_shape=(None, None, 3), with_flatten=False)
     model.load_weights('model.h5')
 
+    print(model.summary())
+    model_summary_md(model)
+
     if do_test:
-        for i in range(577, 581):
+        for i in range(961, 965):
             img_bgr = cv2.imread('{}/{:04d}.png'.format(c.project_video_images_folder, i))
-            test_run(model, img_bgr, show_result=False, save_false=True, false_threshold=121)
+            test_run(model, img_bgr, show_result=False, save_false=False, false_threshold=1)
         sys.exit(0)
 
-    find_vehicles_folder(model, c.project_video_images_folder, c.output_folder_dl, start_frame=0, end_frame=None, scales = [0.8, 1.0], y_from=400)
-    # find_vehicles_folder(model, c.rain_video_images_folder, c.output_folder_dl_rain, start_frame=0, end_frame=None, y_from=272, scales = [0.8, 1.0])
+    find_vehicles_folder(model, c.project_video_images_folder, c.output_folder_dl, start_frame=0, end_frame=None, scales = [0.8, 1.0, 1.5], y_from=400)
 
 
 
