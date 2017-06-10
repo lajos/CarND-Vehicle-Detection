@@ -78,7 +78,7 @@ I have experimented with [RGB](https://en.wikipedia.org/wiki/RGB_color_model), [
 
 ---
 
-## HOG/SVM Method
+## Sliding Window HOG Method
 
 In this method I trained a [support vector machine](https://en.wikipedia.org/wiki/Support_vector_machine) (SVM) classifier with the data set and detected vehicles by sliding a window accross each image and using the trained SVM to predict if a vehicle was present in the window. I used the detected window locations to draw bounding boxes around the vehicles.
 
@@ -163,7 +163,7 @@ For each vehicle the sliding window search results in multiple detections.
 
 ![detections](writeup_assets/det0502.png)
 
-*All detections for a frame*
+*All detections for a frame.*
 
 To find the bounding box of the detections, the detected regions are added to a heatmap. To remove low confidence detections, low areas of the heatmap are discarded (`HeatMap.threshold` function in `heatmap.py`). The distinct regions in the heatmap are labeled using [`scipy.ndimage.measurements.label`](https://docs.scipy.org/doc/scipy-0.16.0/reference/generated/scipy.ndimage.measurements.label.html). As a last step a bounding box is drawn for each labeled area.
 
@@ -287,3 +287,46 @@ The deep learning method is implemented in `dl.py` and uses the same `heatmap.py
 
 ---
 
+## Results
+
+### Sliding Window HOG Method
+
+[![sliding window HOG method](writeup_assets/video_hog.png)](https://youtu.be/kG51PtfE3vM "sliding window HOG method")
+
+### Deep Learning Convolution Method
+
+[![deep learning method](writeup_assets/video_dl.png)](https://youtu.be/HjTpI8C4BxQ "deep learning method")
+
+### Comparison
+
+While this lesson focused on using HOG features with a sliding window search, I've found that the deep learning CNN method was easier to implement because convolutional layers perform a sliding window approach on their own. The deep learning network required using a single color space and processed images about 100x faster than my HOG implementation (although my HOG code has many areas where it can be optimized). I've also found that the deep learning method resulted in less false detections.
+
+---
+
+## Submission
+
+### Python Files
+
+| File        | Description                   |
+| ----------- | -----------------------       |
+|constants.py | project constants             |
+|utils.py     | utility functions             |
+|binning.py   | image binning features        |
+|histogram.py | image histogram features      |
+|hog.py       | image hog features            |
+|classify.py  | hog sliding window detection  |
+|feat.py      | feature preprocessing         |
+|heatmap.py   | heatmap class                 |
+|main.py      | hog processing main file      |
+|dl.py        | deep learning processing main |
+
+
+### Video files
+
+| File                 | Description                   |
+| -----------          | -----------------------       |
+|project_video_hog.mp4 | sliding window hog method     |
+|project_video_dl.mp4  | deep learning CNN method      |
+
+
+---
